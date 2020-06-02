@@ -149,7 +149,11 @@ where
     Res: DeserializeOwned,
 {
     fn drop(&mut self) {
-        self.stop().unwrap()
+        match self.stop() {
+            Ok(()) => (),
+            Err(ref e) if e.kind() == io::ErrorKind::NotConnected => (),
+            Err(error) => panic!(error),
+        }
     }
 }
 
