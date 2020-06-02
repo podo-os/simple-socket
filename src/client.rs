@@ -81,7 +81,7 @@ where
 
     pub(crate) fn response<F>(&mut self, handler: F) -> Result<SocketStatus>
     where
-        F: Fn(Res) -> Req,
+        F: FnMut(Res) -> Req,
     {
         if self.buffer_size.is_some() {
             self.fill_buffer_and_handle(handler)
@@ -122,9 +122,9 @@ where
         self.buffer_size = None;
     }
 
-    fn fill_buffer_and_handle<F>(&mut self, handler: F) -> Result<SocketStatus>
+    fn fill_buffer_and_handle<F>(&mut self, mut handler: F) -> Result<SocketStatus>
     where
-        F: Fn(Res) -> Req,
+        F: FnMut(Res) -> Req,
     {
         self.buffer_offset += match self.stream.read(&mut self.buffer[self.buffer_offset..]) {
             Ok(size) => size,

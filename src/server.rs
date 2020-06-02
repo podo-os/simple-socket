@@ -54,9 +54,9 @@ where
     Req: DeserializeOwned,
     Res: Serialize,
 {
-    pub fn run<H, P>(mut self, handler: H, post: P) -> Result<()>
+    pub fn run<H, P>(mut self, mut handler: H, post: P) -> Result<()>
     where
-        H: Fn(Req) -> Res,
+        H: FnMut(Req) -> Res,
         P: Fn(&mut Self) -> PostServing,
     {
         loop {
