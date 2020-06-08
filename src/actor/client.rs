@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use super::message::{Message, Response};
 use crate::client::SocketClient;
 
-use bincode::Result;
+pub use bincode::Result;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub struct ActorClient<Req, Res>

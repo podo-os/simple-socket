@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use super::message::{Message, Response};
 use crate::server::{PostServing, SocketServer};
 
-use podo_core_driver::RuntimeError;
+pub use podo_core_driver::RuntimeError;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub trait ActorServer<Req, Res>
