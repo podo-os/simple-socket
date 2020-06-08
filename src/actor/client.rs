@@ -28,27 +28,27 @@ where
         })
     }
 
-    pub fn stop(mut self) -> Result<()> {
+    pub fn stop(self) -> Result<()> {
         self.inner.request(&Message::Stop).map(|_| ())
     }
 
-    pub fn pause(&mut self) -> Result<()> {
+    pub fn pause(&self) -> Result<()> {
         self.inner.request(&Message::Pause).map(|_| ())
     }
 
-    pub fn resume(&mut self) -> Result<()> {
+    pub fn resume(&self) -> Result<()> {
         self.inner.request(&Message::Resume).map(|_| ())
     }
 
-    pub fn hibernate(&mut self) -> Result<()> {
+    pub fn hibernate(&self) -> Result<()> {
         self.inner.request(&Message::Hibernate).map(|_| ())
     }
 
-    pub fn wake_up(&mut self) -> Result<()> {
+    pub fn wake_up(&self) -> Result<()> {
         self.inner.request(&Message::WakeUp).map(|_| ())
     }
 
-    pub fn request(&mut self, message: Req) -> Result<Res> {
+    pub fn request(&self, message: Req) -> Result<Res> {
         self.inner
             .request(&Message::Custom(message))
             .map(|m| m.unwrap_custom())

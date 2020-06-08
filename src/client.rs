@@ -1,6 +1,7 @@
 use std::io::{self, Read, Write};
 use std::marker::PhantomData;
 use std::net::{Shutdown, SocketAddr};
+use std::sync::Mutex;
 
 use bincode::Result;
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
@@ -12,9 +13,7 @@ where
     Req: Serialize,
     Res: DeserializeOwned,
 {
-    buffer: Vec<u8>,
-    buffer_offset: usize,
-    buffer_size: Option<usize>,
+    buffer: Mutex<Buffer>,
     stream: Socket,
 
     _request: PhantomData<Req>,
@@ -36,9 +35,7 @@ where
         socket.connect(&addr.into())?;
 
         Ok(Self {
-            buffer: vec![],
-            buffer_offset: 0,
-            buffer_size: None,
+            buffer: Mutex::default(),
             stream: socket,
 
             _request: PhantomData::default(),
@@ -50,9 +47,7 @@ where
         stream.set_nonblocking(true)?;
 
         Ok(Self {
-            buffer: vec![],
-            buffer_offset: 0,
-            buffer_size: None,
+            buffer: Mutex::default(),
             stream,
 
             _request: PhantomData::default(),
@@ -66,30 +61,38 @@ where
     Req: Serialize,
     Res: DeserializeOwned,
 {
-    pub fn request(&mut self, request: &Req) -> Result<Res> {
-        self.buffer.clear();
-        bincode::serialize_into(&mut self.buffer, request)?;
+    pub fn request(&self, request: &Req) -> Result<Res> {
+        let mut buffer = self.buffer.lock().unwrap();
 
-        let size = self.buffer.len() as u64;
+        let stream = &mut &self.stream;
+
+        buffer.data.clear();
+        bincode::serialize_into(&mut buffer.data, request)?;
+
+        let size = buffer.data.len() as u64;
         assert_ne!(size, 0, "Message must have one or more bytes.");
 
-        self.stream.write_u64::<NetworkEndian>(size)?;
-        self.stream.write_all(&self.buffer)?;
+        stream.write_u64::<NetworkEndian>(size)?;
+        stream.write_all(&buffer.data)?;
 
-        bincode::deserialize_from(&mut self.stream)
+        bincode::deserialize_from(stream)
     }
 
-    pub(crate) fn response<F>(&mut self, handler: F) -> Result<SocketStatus>
+    pub(crate) fn response<F>(&self, handler: F) -> Result<SocketStatus>
     where
         F: FnMut(Res) -> Req,
     {
-        if self.buffer_size.is_some() {
+        let buffer = self.buffer.lock().unwrap();
+
+        let stream = &mut &self.stream;
+
+        if buffer.size.is_some() {
             self.fill_buffer_and_handle(handler)
         } else {
             let mut buf = [0; 8];
-            match self.stream.peek(&mut buf) {
+            match stream.peek(&mut buf) {
                 Ok(8) => {
-                    self.stream.read_exact(&mut buf)?;
+                    stream.read_exact(&mut buf)?;
 
                     let size = buf.as_ref().read_u64::<NetworkEndian>()? as usize;
                     if size == 0 {
@@ -106,36 +109,47 @@ where
         }
     }
 
-    fn stop(&mut self) -> io::Result<()> {
-        self.stream.write_u64::<NetworkEndian>(0)?;
-        self.stream.shutdown(Shutdown::Read)?;
+    fn stop(&self) -> io::Result<()> {
+        let stream = &mut &self.stream;
+
+        stream.write_u64::<NetworkEndian>(0)?;
+        stream.shutdown(Shutdown::Read)?;
         Ok(())
     }
 
-    fn set_buffer(&mut self, size: usize) {
-        self.buffer_offset = 0;
-        self.buffer_size = Some(size);
-        self.buffer.resize(size, 0);
+    fn set_buffer(&self, size: usize) {
+        let mut buffer = self.buffer.lock().unwrap();
+
+        buffer.offset = 0;
+        buffer.size = Some(size);
+        buffer.data.resize(size, 0);
     }
 
-    fn reset_buffer(&mut self) {
-        self.buffer_size = None;
+    fn reset_buffer(&self) {
+        let mut buffer = self.buffer.lock().unwrap();
+
+        buffer.size = None;
     }
 
-    fn fill_buffer_and_handle<F>(&mut self, mut handler: F) -> Result<SocketStatus>
+    fn fill_buffer_and_handle<F>(&self, mut handler: F) -> Result<SocketStatus>
     where
         F: FnMut(Res) -> Req,
     {
-        self.buffer_offset += match self.stream.read(&mut self.buffer[self.buffer_offset..]) {
+        let mut buffer = self.buffer.lock().unwrap();
+        let offset = buffer.offset;
+
+        let stream = &mut &self.stream;
+
+        buffer.offset += match stream.read(&mut buffer.data[offset..]) {
             Ok(size) => size,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(SocketStatus::Alive),
             Err(error) => return Err(error.into()),
         };
-        if self.buffer_offset >= self.buffer_size.unwrap() {
-            let request = bincode::deserialize_from(&self.buffer[..])?;
+        if buffer.offset >= buffer.size.unwrap() {
+            let request = bincode::deserialize_from(&buffer.data[..])?;
             self.reset_buffer();
 
-            bincode::serialize_into(&mut self.stream, &handler(request))?;
+            bincode::serialize_into(stream, &handler(request))?;
             Ok(SocketStatus::Alive)
         } else {
             Ok(SocketStatus::Alive)
@@ -160,4 +174,11 @@ where
 pub enum SocketStatus {
     Alive,
     Closed,
+}
+
+#[derive(Default)]
+struct Buffer {
+    data: Vec<u8>,
+    offset: usize,
+    size: Option<usize>,
 }
