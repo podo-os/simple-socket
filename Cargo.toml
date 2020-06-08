@@ -13,7 +13,7 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["actor"]
+default = []
 
 actor = ["podo-core-driver"]
 
