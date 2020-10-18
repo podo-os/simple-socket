@@ -55,7 +55,7 @@ fn main() {
     {
         let name = "foo".to_string();
 
-        let mut client = SocketClient::<Request, Response>::try_new(socket).unwrap();
+        let client = SocketClient::<Request, Response>::try_new(socket).unwrap();
 
         let response = client.request(&Request::Hello(name.clone())).unwrap();
         dbg!(response);
